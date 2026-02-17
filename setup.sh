@@ -26,6 +26,7 @@ echo "  🔐 Environment Configuration"
 echo "  ─────────────────────────────────────────────────"
 
 ENV_FILE="server/.env"
+CONFIGURE_ENV=true
 
 if [ -f "$ENV_FILE" ]; then
   echo ""
@@ -33,64 +34,62 @@ if [ -f "$ENV_FILE" ]; then
   read -p "  Overwrite it? (y/N): " OVERWRITE
   if [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
     echo "  Keeping existing $ENV_FILE"
-    echo ""
-    echo "  ✅ Setup complete! Run 'cd server && npm run dev' and 'cd frontend && npm run dev' to start."
-    echo ""
-    exit 0
+    CONFIGURE_ENV=false
   fi
 fi
 
-echo ""
-echo "  Before configuring, you'll need a testnet wallet."
-echo "  If you don't have one yet, create one using either:"
-echo ""
-echo "    Option A: MetaMask  → https://metamask.io/"
-echo "    Option B: Vanity ETH → https://vanity-eth.tk/ (quick, runs locally)"
-echo ""
-echo "  Then fund it with testnet tokens:"
-echo "    • ETH (gas):   https://www.coinbase.com/faucets/base-ethereum-sepolia-faucet"
-echo "    • USDC (pays): https://faucet.circle.com/ (select Base Sepolia)"
-echo ""
-echo "  ─────────────────────────────────────────────────"
-echo ""
-
-# Default values
-DEFAULT_PAY_TO="0x209693Bc6EfC3BEDC16a31990A4B163C56Db0434"
-DEFAULT_FACILITATOR="https://x402.org/facilitator"
-DEFAULT_NETWORK="eip155:84532"
-DEFAULT_PORT="4021"
-
-# Prompt for wallet address
-read -p "  💰 Pay-to wallet address (receives payments)
-     [default: ${DEFAULT_PAY_TO:0:10}...${DEFAULT_PAY_TO: -6}]: " PAY_TO
-PAY_TO="${PAY_TO:-$DEFAULT_PAY_TO}"
-
-echo ""
-
-# Prompt for private key
-read -p "  🔑 Wallet private key (for signing — TESTNET ONLY!)
-     [starts with 0x]: " PRIVATE_KEY
-
-if [ -z "$PRIVATE_KEY" ]; then
-  PRIVATE_KEY="0x_YOUR_TESTNET_PRIVATE_KEY_HERE"
+if [ "$CONFIGURE_ENV" = true ]; then
   echo ""
-  echo "  ⚠️  No private key provided. You'll need to add it manually to $ENV_FILE"
-fi
+  echo "  Before configuring, you'll need a testnet wallet."
+  echo "  If you don't have one yet, create one using either:"
+  echo ""
+  echo "    Option A: MetaMask  → https://metamask.io/"
+  echo "    Option B: Vanity ETH → https://vanity-eth.tk/ (quick, runs locally)"
+  echo ""
+  echo "  Then fund it with testnet tokens:"
+  echo "    • ETH (gas):   https://www.coinbase.com/faucets/base-ethereum-sepolia-faucet"
+  echo "    • USDC (pays): https://faucet.circle.com/ (select Base Sepolia)"
+  echo ""
+  echo "  ─────────────────────────────────────────────────"
+  echo ""
 
-echo ""
+  # Default values
+  DEFAULT_PAY_TO="0x209693Bc6EfC3BEDC16a31990A4B163C56Db0434"
+  DEFAULT_FACILITATOR="https://x402.org/facilitator"
+  DEFAULT_NETWORK="eip155:84532"
+  DEFAULT_PORT="4021"
 
-# Prompt for optional overrides
-read -p "  🌐 Facilitator URL [default: $DEFAULT_FACILITATOR]: " FACILITATOR
-FACILITATOR="${FACILITATOR:-$DEFAULT_FACILITATOR}"
+  # Prompt for wallet address
+  read -p "  💰 Pay-to wallet address (receives payments)
+       [default: ${DEFAULT_PAY_TO:0:10}...${DEFAULT_PAY_TO: -6}]: " PAY_TO
+  PAY_TO="${PAY_TO:-$DEFAULT_PAY_TO}"
 
-read -p "  ⛓️  Network (CAIP-2) [default: $DEFAULT_NETWORK]: " NETWORK
-NETWORK="${NETWORK:-$DEFAULT_NETWORK}"
+  echo ""
 
-read -p "  🔌 Server port [default: $DEFAULT_PORT]: " PORT
-PORT="${PORT:-$DEFAULT_PORT}"
+  # Prompt for private key
+  read -p "  🔑 Wallet private key (for signing — TESTNET ONLY!)
+       [starts with 0x]: " PRIVATE_KEY
 
-# Write .env file
-cat > "$ENV_FILE" << EOF
+  if [ -z "$PRIVATE_KEY" ]; then
+    PRIVATE_KEY="0x_YOUR_TESTNET_PRIVATE_KEY_HERE"
+    echo ""
+    echo "  ⚠️  No private key provided. You'll need to add it manually to $ENV_FILE"
+  fi
+
+  echo ""
+
+  # Prompt for optional overrides
+  read -p "  🌐 Facilitator URL [default: $DEFAULT_FACILITATOR]: " FACILITATOR
+  FACILITATOR="${FACILITATOR:-$DEFAULT_FACILITATOR}"
+
+  read -p "  ⛓️  Network (CAIP-2) [default: $DEFAULT_NETWORK]: " NETWORK
+  NETWORK="${NETWORK:-$DEFAULT_NETWORK}"
+
+  read -p "  🔌 Server port [default: $DEFAULT_PORT]: " PORT
+  PORT="${PORT:-$DEFAULT_PORT}"
+
+  # Write .env file
+  cat > "$ENV_FILE" << EOF
 # ─── x402 Demo Configuration ────────────────────────────────────
 # Wallet that receives payments (any EVM address)
 PAY_TO_ADDRESS=$PAY_TO
@@ -109,8 +108,9 @@ NETWORK=$NETWORK
 PORT=$PORT
 EOF
 
-echo ""
-echo "  ✅ Created $ENV_FILE with your configuration"
+  echo ""
+  echo "  ✅ Created $ENV_FILE with your configuration"
+fi
 
 # ─── Launch Dev Servers ──────────────────────────────────────────
 echo ""
