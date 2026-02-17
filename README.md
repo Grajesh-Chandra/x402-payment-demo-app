@@ -150,8 +150,23 @@ Then open **http://localhost:3000** in your browser.
 │
 ├── .env.example              # Environment variable template
 ├── setup.sh                  # One-command setup
+├── cleanup.sh                # Cleanup script (kill servers, remove artifacts)
 └── README.md                 # This file
 ```
+
+## 🧹 Cleanup
+
+To stop running servers, remove `node_modules`, and clean build artifacts:
+
+```bash
+chmod +x cleanup.sh && ./cleanup.sh
+```
+
+This will:
+- Kill any running dev servers (ports 3000 and 4021)
+- Remove `node_modules/` from both server and frontend
+- Remove build artifacts (`.next/`, `dist/`)
+- Optionally remove `server/.env` (asks before deleting)
 
 ## 🔌 API Endpoints
 
