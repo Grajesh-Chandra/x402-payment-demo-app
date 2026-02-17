@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 4021;
 // ─── Configuration ─────────────────────────────────────────────────
 const payTo = process.env.PAY_TO_ADDRESS || "0x209693Bc6EfC3BEDC16a31990A4B163C56Db0434";
 const facilitatorUrl = process.env.FACILITATOR_URL || "https://x402.org/facilitator";
-const network = process.env.NETWORK || "eip155:84532"; // Base Sepolia
+const network = (process.env.NETWORK || "eip155:84532") as `${string}:${string}`; // Base Sepolia
 
 // ─── CORS ──────────────────────────────────────────────────────────
 app.use(
@@ -248,6 +248,10 @@ app.use(
 
 // ─── Protected Endpoints ───────────────────────────────────────────
 
+import { logTransaction, getTransactions } from "./logger.js";
+
+// ... existing code ...
+
 app.get("/api/weather", (_req, res) => {
   const cities = [
     { city: "San Francisco", temp: 62, condition: "Foggy", humidity: 78, wind: "12 mph NW" },
@@ -257,6 +261,16 @@ app.get("/api/weather", (_req, res) => {
     { city: "Mumbai", temp: 88, condition: "Hot & Humid", humidity: 90, wind: "6 mph SW" },
   ];
   const weather = cities[Math.floor(Math.random() * cities.length)];
+
+  // Log successful transaction
+  logTransaction({
+    id: `tx-${Date.now()}`,
+    endpoint: "/api/weather",
+    price: "$0.001",
+    status: "success",
+    timestamp: new Date().toISOString(),
+  });
+
   res.json({
     success: true,
     data: {
@@ -277,6 +291,16 @@ app.get("/api/joke", (_req, res) => {
     { setup: "Why did the developer go broke?", punchline: "Because he used up all his cache." },
   ];
   const joke = jokes[Math.floor(Math.random() * jokes.length)];
+
+  // Log successful transaction
+  logTransaction({
+    id: `tx-${Date.now()}`,
+    endpoint: "/api/joke",
+    price: "$0.0005",
+    status: "success",
+    timestamp: new Date().toISOString(),
+  });
+
   res.json({
     success: true,
     data: {
@@ -289,6 +313,15 @@ app.get("/api/joke", (_req, res) => {
 });
 
 app.get("/api/premium-report", (_req, res) => {
+  // Log successful transaction
+  logTransaction({
+    id: `tx-${Date.now()}`,
+    endpoint: "/api/premium-report",
+    price: "$0.01",
+    status: "success",
+    timestamp: new Date().toISOString(),
+  });
+
   res.json({
     success: true,
     data: {
@@ -309,6 +342,11 @@ app.get("/api/premium-report", (_req, res) => {
     },
     payment: { protocol: "x402", status: "paid" },
   });
+});
+
+app.get("/api/transactions", (_req, res) => {
+  const transactions = getTransactions();
+  res.json({ success: true, transactions });
 });
 
 // ─── Free Endpoints ────────────────────────────────────────────────

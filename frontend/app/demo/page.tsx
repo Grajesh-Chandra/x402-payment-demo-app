@@ -77,6 +77,28 @@ export default function DemoPage() {
   const [consentEndpoint, setConsentEndpoint] = useState<Endpoint | null>(null);
   const flowRef = useRef<HTMLDivElement>(null);
 
+  // ─── Fetch Transactions ─────────────────────────────────────
+  const fetchTransactions = useCallback(async () => {
+    try {
+      const res = await fetch(`${SERVER_URL}/api/transactions`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.transactions)) {
+          setTxLog(data.transactions.map((tx: any) => ({
+             id: tx.id,
+             endpoint: tx.endpoint,
+             price: tx.price,
+             status: tx.status,
+             time: new Date(tx.timestamp).toLocaleTimeString(),
+             response: undefined // We don't store full response in history list for now
+          })));
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch transactions:", error);
+    }
+  }, []);
+
   // ─── Check Server Status ────────────────────────────────────
   useEffect(() => {
     const checkServer = async () => {
@@ -90,6 +112,8 @@ export default function DemoPage() {
             const data = await epRes.json();
             setEndpoints(data.endpoints || []);
           }
+           // Fetch transactions when server is online
+           fetchTransactions();
         } else {
           setServerStatus("offline");
         }
@@ -100,7 +124,7 @@ export default function DemoPage() {
     checkServer();
     const interval = setInterval(checkServer, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchTransactions]);
 
   // ─── Fetch USDC Balance ─────────────────────────────────────
   const fetchBalance = useCallback(async (address: string) => {
@@ -277,6 +301,9 @@ export default function DemoPage() {
               // Refresh balance after payment
               if (walletAddress) fetchBalance(walletAddress);
 
+              // Refresh transaction logs
+              fetchTransactions();
+
               // Redirect to resource page after a brief delay
               const resourceRoute = RESOURCE_ROUTES[endpoint.path];
               if (resourceRoute) {
@@ -286,18 +313,7 @@ export default function DemoPage() {
                 }, 1200);
               }
 
-              // Add to transaction log
-              setTxLog((prev) => [
-                {
-                  id: txId,
-                  endpoint: endpoint.path,
-                  price: endpoint.price,
-                  status: "success",
-                  time: new Date().toLocaleTimeString(),
-                  response: paidData,
-                },
-                ...prev,
-              ]);
+              // We removed local setTxLog here because we fetch from server now
             } else {
               throw new Error(`Server returned ${paidRes.status}: ${await paidRes.text()}`);
             }
@@ -312,16 +328,8 @@ export default function DemoPage() {
               status: "error",
             });
 
-            setTxLog((prev) => [
-              {
-                id: txId,
-                endpoint: endpoint.path,
-                price: endpoint.price,
-                status: "failed",
-                time: new Date().toLocaleTimeString(),
-              },
-              ...prev,
-            ]);
+             // Even if failed on client side, we might want to refresh logs if server logged a failure (though current server impl only logs success)
+             // But for now, client side failure isn't logged on server, so no refresh needed.
           }
         } else if (initialRes.ok) {
           // Somehow the endpoint responded without payment required
@@ -343,22 +351,11 @@ export default function DemoPage() {
             : errorMsg,
           status: "error",
         });
-
-        setTxLog((prev) => [
-          {
-            id: txId,
-            endpoint: activeEndpoint || "unknown",
-            price: endpoint.price,
-            status: "failed",
-            time: new Date().toLocaleTimeString(),
-          },
-          ...prev,
-        ]);
       }
 
       setActiveEndpoint(null);
     },
-    [walletAddress, privateKey, activeEndpoint, fetchBalance]
+    [walletAddress, privateKey, activeEndpoint, fetchBalance, fetchTransactions, router]
   );
 
   return (
