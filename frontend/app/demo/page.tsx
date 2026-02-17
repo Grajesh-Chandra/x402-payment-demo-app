@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { createPublicClient, http, formatUnits } from "viem";
 import { baseSepolia } from "viem/chains";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 
 // ─── USDC on Base Sepolia ────────────────────────────────────────
@@ -54,7 +55,15 @@ interface TxLogEntry {
 const SERVER_URL = "http://localhost:4021";
 
 // ─── Demo Page Component ─────────────────────────────────────────
+// ─── Route mapping for resource pages ────────────────────────────
+const RESOURCE_ROUTES: Record<string, string> = {
+  "/api/weather": "/resource/weather",
+  "/api/joke": "/resource/joke",
+  "/api/premium-report": "/resource/report",
+};
+
 export default function DemoPage() {
+  const router = useRouter();
   const [privateKey, setPrivateKey] = useState("");
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletError, setWalletError] = useState<string | null>(null);
@@ -65,6 +74,7 @@ export default function DemoPage() {
   const [txLog, setTxLog] = useState<TxLogEntry[]>([]);
   const [activeEndpoint, setActiveEndpoint] = useState<string | null>(null);
   const [serverStatus, setServerStatus] = useState<"checking" | "online" | "offline">("checking");
+  const [consentEndpoint, setConsentEndpoint] = useState<Endpoint | null>(null);
   const flowRef = useRef<HTMLDivElement>(null);
 
   // ─── Check Server Status ────────────────────────────────────
@@ -260,13 +270,21 @@ export default function DemoPage() {
               addStep({
                 id: "step-5",
                 label: "✅ Resource Delivered!",
-                detail: `Payment of ${endpoint.price} ${endpoint.currency} settled. Data received successfully.`,
+                detail: `Payment of ${endpoint.price} ${endpoint.currency} settled. Redirecting to resource page...`,
                 status: "success",
-                data: JSON.stringify(paidData, null, 2),
               });
 
               // Refresh balance after payment
               if (walletAddress) fetchBalance(walletAddress);
+
+              // Redirect to resource page after a brief delay
+              const resourceRoute = RESOURCE_ROUTES[endpoint.path];
+              if (resourceRoute) {
+                const encodedData = btoa(JSON.stringify(paidData));
+                setTimeout(() => {
+                  router.push(`${resourceRoute}?data=${encodedData}`);
+                }, 1200);
+              }
 
               // Add to transaction log
               setTxLog((prev) => [
@@ -495,7 +513,7 @@ export default function DemoPage() {
                         <button
                           className={`btn-pay ${activeEndpoint === ep.path ? "loading" : ""}`}
                           disabled={!walletAddress || !!activeEndpoint || serverStatus !== "online"}
-                          onClick={() => callEndpoint(ep)}
+                          onClick={() => setConsentEndpoint(ep)}
                         >
                           Pay & Call →
                         </button>
@@ -571,6 +589,71 @@ export default function DemoPage() {
           </div>
         </div>
       </main>
+
+      {/* ─── Consent Modal ────────────────────────────────────── */}
+      {consentEndpoint && (
+        <div className="consent-overlay" onClick={() => setConsentEndpoint(null)}>
+          <div className="consent-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="consent-header">
+              <div className="consent-icon">{consentEndpoint.icon}</div>
+              <h2 className="consent-title">Payment Required</h2>
+              <p className="consent-subtitle">This resource is protected by the x402 protocol</p>
+            </div>
+
+            <div className="consent-details">
+              <div className="consent-detail-row">
+                <span className="consent-detail-label">Endpoint</span>
+                <span className="consent-detail-value">
+                  <span className="endpoint-method" style={{ fontSize: 11 }}>{consentEndpoint.method}</span>
+                  {consentEndpoint.path}
+                </span>
+              </div>
+              <div className="consent-detail-row">
+                <span className="consent-detail-label">Description</span>
+                <span className="consent-detail-value">{consentEndpoint.description}</span>
+              </div>
+              <div className="consent-detail-row">
+                <span className="consent-detail-label">Price</span>
+                <span className="consent-detail-value consent-price">{consentEndpoint.price} {consentEndpoint.currency}</span>
+              </div>
+              <div className="consent-detail-row">
+                <span className="consent-detail-label">Network</span>
+                <span className="consent-detail-value">Base Sepolia</span>
+              </div>
+              <div className="consent-detail-row">
+                <span className="consent-detail-label">Scheme</span>
+                <span className="consent-detail-value">{consentEndpoint.scheme}</span>
+              </div>
+              <div className="consent-detail-row">
+                <span className="consent-detail-label">Wallet</span>
+                <span className="consent-detail-value" style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>
+                  {walletAddress ? `${walletAddress.slice(0, 8)}...${walletAddress.slice(-6)}` : "Not connected"}
+                </span>
+              </div>
+            </div>
+
+            <div className="consent-warning">
+              ⚠️ This will sign and submit a payment transaction on Base Sepolia testnet
+            </div>
+
+            <div className="consent-actions">
+              <button className="btn-secondary" onClick={() => setConsentEndpoint(null)}>
+                Cancel
+              </button>
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  const ep = consentEndpoint;
+                  setConsentEndpoint(null);
+                  callEndpoint(ep);
+                }}
+              >
+                ⚡ Confirm & Pay {consentEndpoint.price}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
