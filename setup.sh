@@ -112,22 +112,10 @@ EOF
 echo ""
 echo "  ✅ Created $ENV_FILE with your configuration"
 
-# ─── Print Next Steps ───────────────────────────────────────────
+# ─── Launch Dev Servers ──────────────────────────────────────────
 echo ""
 echo "  ╔══════════════════════════════════════════════════╗"
 echo "  ║               ✅  Setup Complete!                ║"
-echo "  ╠══════════════════════════════════════════════════╣"
-echo "  ║                                                  ║"
-echo "  ║  To run the demo:                                ║"
-echo "  ║                                                  ║"
-echo "  ║  Terminal 1 (Resource Server):                   ║"
-echo "  ║    cd server && npm run dev                      ║"
-echo "  ║                                                  ║"
-echo "  ║  Terminal 2 (Frontend):                          ║"
-echo "  ║    cd frontend && npm run dev                    ║"
-echo "  ║                                                  ║"
-echo "  ║  Then open: http://localhost:3000                ║"
-echo "  ║                                                  ║"
 echo "  ╠══════════════════════════════════════════════════╣"
 echo "  ║  Before testing payments, make sure:             ║"
 echo "  ║    ✓ Your private key is set in server/.env      ║"
@@ -135,3 +123,36 @@ echo "  ║    ✓ Your wallet has testnet ETH (gas)           ║"
 echo "  ║    ✓ Your wallet has testnet USDC (payments)     ║"
 echo "  ╚══════════════════════════════════════════════════╝"
 echo ""
+echo "  🚀 Launching dev servers..."
+echo ""
+
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Open Terminal 1 — Resource Server
+osascript -e "
+tell application \"Terminal\"
+  do script \"cd '$PROJECT_DIR/server' && echo '🖥️  x402 Resource Server' && npm run dev\"
+  set custom title of front window to \"x402 Server\"
+end tell
+"
+echo "  ✓ Opened terminal: Resource Server (port 4021)"
+
+# Open Terminal 2 — Frontend
+osascript -e "
+tell application \"Terminal\"
+  do script \"cd '$PROJECT_DIR/frontend' && echo '🌐 x402 Frontend' && npm run dev\"
+  set custom title of front window to \"x402 Frontend\"
+end tell
+"
+echo "  ✓ Opened terminal: Frontend (port 3000)"
+
+# Wait a moment then open browser
+echo ""
+echo "  ⏳ Waiting for servers to start..."
+sleep 4
+open http://localhost:3000
+echo "  ✓ Opened http://localhost:3000 in your browser"
+echo ""
+echo "  🎉 You're all set! Happy demo-ing!"
+echo ""
+
