@@ -18,41 +18,124 @@ Client → Signs payment (USDC on Base) → Re-sends with payment header
 Server → Verifies via Facilitator → Settles on-chain → Returns data
 ```
 
+---
+
 ## 🚀 Quick Start
 
 ### Prerequisites
 
 - **Node.js** ≥ 18
-- A **testnet wallet** with Base Sepolia USDC
-  - Create one at [MetaMask](https://metamask.io/) or use any EVM wallet
-  - Get testnet ETH: [Base Sepolia Faucet](https://www.coinbase.com/faucets/base-ethereum-sepolia-faucet)
-  - Get testnet USDC: [Circle Faucet](https://faucet.circle.com/)
+- **Git**
 
-### Setup
+### 1. Clone & Setup
 
 ```bash
-# 1. Install dependencies
+git clone https://github.com/Grajesh-Chandra/x402-payment-demo-app.git
+cd x402-payment-demo-app
 chmod +x setup.sh && ./setup.sh
+```
 
-# 2. Configure environment
-cp .env.example server/.env
-# Edit server/.env and add your wallet address & private key
+The setup script will:
+- Install all dependencies (server + frontend)
+- Create your `server/.env` from the template
+- Prompt you to configure your wallet (see below)
 
-# 3. Start the Resource Server (Terminal 1)
+---
+
+## 🔐 Wallet Setup (Required Before Testing Payments)
+
+You need **two things** to test payments: a wallet with testnet USDC, and its private key in the `.env` file.
+
+### Step 1: Create a Wallet
+
+You can use **any EVM wallet**. Here are two options:
+
+<details>
+<summary><b>Option A: MetaMask (Browser Extension)</b></summary>
+
+1. Install [MetaMask](https://metamask.io/) browser extension
+2. Create a new wallet (or use an existing one)
+3. **Add Base Sepolia network** to MetaMask:
+   - Go to Settings → Networks → Add Network
+   - Network Name: `Base Sepolia`
+   - RPC URL: `https://sepolia.base.org`
+   - Chain ID: `84532`
+   - Currency: `ETH`
+   - Explorer: `https://sepolia.basescan.org`
+4. **Export your private key**:
+   - Click the three dots `⋮` next to your account name
+   - Select **Account Details** → **Show Private Key**
+   - Confirm your password and copy the key
+
+</details>
+
+<details>
+<summary><b>Option B: Generate a New Wallet (Quick)</b></summary>
+
+1. Go to [Vanity ETH](https://vanity-eth.tk/) (runs locally in your browser)
+2. Click **Generate** to create a random wallet
+3. Copy both the **Address** and **Private Key**
+
+> ⚠️ This wallet is for **testnet use only**. Never send real funds to it.
+
+</details>
+
+### Step 2: Fund Your Wallet with Testnet Tokens
+
+Your wallet needs a small amount of **testnet ETH** (for gas) and **testnet USDC** (for payments).
+
+| Token | Faucet | Amount Needed |
+|-------|--------|---------------|
+| **ETH** (gas) | [Base Sepolia Faucet](https://www.coinbase.com/faucets/base-ethereum-sepolia-faucet) | ~0.01 ETH |
+| **USDC** (payments) | [Circle USDC Faucet](https://faucet.circle.com/) | ~10 USDC |
+
+1. Go to the **ETH faucet** → paste your wallet address → claim testnet ETH
+2. Go to the **USDC faucet** → select **Base Sepolia** → paste your address → claim USDC
+
+> 💡 The Circle faucet gives 10 USDC at a time. That's enough for ~10,000 weather API calls!
+
+### Step 3: Configure Environment Variables
+
+Edit `server/.env` and fill in your wallet details:
+
+```env
+# Your wallet address (receives payments)
+PAY_TO_ADDRESS=0xYourWalletAddressHere
+
+# Your wallet's private key (signs payment transactions — TESTNET ONLY!)
+EVM_PRIVATE_KEY=0xYourPrivateKeyHere
+
+# These defaults work out of the box:
+FACILITATOR_URL=https://x402.org/facilitator
+NETWORK=eip155:84532
+PORT=4021
+```
+
+> ⚠️ **NEVER use a mainnet private key or a wallet with real funds!** This is for testnet demo purposes only.
+
+---
+
+## ▶️ Running the Demo
+
+You need two terminals:
+
+```bash
+# Terminal 1 — Resource Server (backend)
 cd server && npm run dev
 
-# 4. Start the Frontend (Terminal 2)
+# Terminal 2 — Frontend
 cd frontend && npm run dev
-
-# 5. Open the demo
-open http://localhost:3000
 ```
+
+Then open **http://localhost:3000** in your browser.
+
+---
 
 ## 📁 Project Structure
 
 ```
 ├── server/                    # Express Resource Server
-│   ├── src/index.ts          # x402 payment middleware + API endpoints
+│   ├── src/index.ts          # x402 payment middleware + API endpoints + logging
 │   ├── package.json
 │   └── .env                  # Configuration (wallet, network, etc.)
 │
@@ -80,6 +163,16 @@ open http://localhost:3000
 | `/api/health` | GET | Free | Server health check |
 | `/api/endpoints` | GET | Free | Endpoint discovery with pricing |
 
+## 🔑 Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PAY_TO_ADDRESS` | Wallet to receive payments | Demo address |
+| `EVM_PRIVATE_KEY` | Client wallet private key for signing payments | **Required** |
+| `FACILITATOR_URL` | x402 facilitator server | `https://x402.org/facilitator` |
+| `NETWORK` | Blockchain network (CAIP-2) | `eip155:84532` (Base Sepolia) |
+| `PORT` | Server port | `4021` |
+
 ## 🎯 Demo Walkthrough
 
 1. **Landing Page** — Explains x402 with animated flow diagram and code snippets
@@ -88,15 +181,14 @@ open http://localhost:3000
    - Real-time payment visualization
    - Transaction log with receipts
 
-## 🔑 Environment Variables
+## 🪵 Server Logging
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PAY_TO_ADDRESS` | Wallet to receive payments | Demo address |
-| `EVM_PRIVATE_KEY` | Client wallet for signing payments | Required |
-| `FACILITATOR_URL` | x402 facilitator server | `https://x402.org/facilitator` |
-| `NETWORK` | Blockchain network (CAIP-2) | `eip155:84532` (Base Sepolia) |
-| `PORT` | Server port | `4021` |
+The server includes **color-coded request/response logging** in the terminal. Every API call shows:
+- Incoming request (method, URL, headers, body)
+- x402 payment headers (`x-payment`, `payment-required`, etc.)
+- Response (status, duration, body)
+
+This gives you full visibility into the x402 payment flow as it happens.
 
 ## 📚 Resources
 

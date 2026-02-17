@@ -7,34 +7,130 @@ echo "  ║      x402 Payment Protocol Demo — Setup          ║"
 echo "  ╚══════════════════════════════════════════════════╝"
 echo ""
 
-# Install server dependencies
+# ─── Install Dependencies ───────────────────────────────────────
 echo "📦 Installing server dependencies..."
 cd server
 npm install
 cd ..
 
-# Install frontend dependencies
+echo ""
 echo "📦 Installing frontend dependencies..."
 cd frontend
 npm install
 cd ..
 
+# ─── Environment Configuration ──────────────────────────────────
 echo ""
-echo "  ✅ Setup complete!"
-echo ""
-echo "  To run the demo:"
 echo "  ─────────────────────────────────────────────────"
-echo "  Terminal 1 (Resource Server):"
-echo "    cd server && npm run dev"
+echo "  🔐 Environment Configuration"
+echo "  ─────────────────────────────────────────────────"
+
+ENV_FILE="server/.env"
+
+if [ -f "$ENV_FILE" ]; then
+  echo ""
+  echo "  ⚠️  $ENV_FILE already exists."
+  read -p "  Overwrite it? (y/N): " OVERWRITE
+  if [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
+    echo "  Keeping existing $ENV_FILE"
+    echo ""
+    print_next_steps
+    exit 0
+  fi
+fi
+
 echo ""
-echo "  Terminal 2 (Frontend):"
-echo "    cd frontend && npm run dev"
+echo "  Before configuring, you'll need a testnet wallet."
+echo "  If you don't have one yet, create one using either:"
 echo ""
-echo "  Then open: http://localhost:3000"
+echo "    Option A: MetaMask  → https://metamask.io/"
+echo "    Option B: Vanity ETH → https://vanity-eth.tk/ (quick, runs locally)"
+echo ""
+echo "  Then fund it with testnet tokens:"
+echo "    • ETH (gas):   https://www.coinbase.com/faucets/base-ethereum-sepolia-faucet"
+echo "    • USDC (pays): https://faucet.circle.com/ (select Base Sepolia)"
+echo ""
 echo "  ─────────────────────────────────────────────────"
 echo ""
-echo "  ⚠️  Before testing payments:"
-echo "  1. Add your testnet private key to server/.env"
-echo "  2. Get testnet USDC on Base Sepolia"
-echo "     Faucet: https://faucet.circle.com/"
+
+# Default values
+DEFAULT_PAY_TO="0x209693Bc6EfC3BEDC16a31990A4B163C56Db0434"
+DEFAULT_FACILITATOR="https://x402.org/facilitator"
+DEFAULT_NETWORK="eip155:84532"
+DEFAULT_PORT="4021"
+
+# Prompt for wallet address
+read -p "  💰 Pay-to wallet address (receives payments)
+     [default: ${DEFAULT_PAY_TO:0:10}...${DEFAULT_PAY_TO: -6}]: " PAY_TO
+PAY_TO="${PAY_TO:-$DEFAULT_PAY_TO}"
+
+echo ""
+
+# Prompt for private key
+read -p "  🔑 Wallet private key (for signing — TESTNET ONLY!)
+     [starts with 0x]: " PRIVATE_KEY
+
+if [ -z "$PRIVATE_KEY" ]; then
+  PRIVATE_KEY="0x_YOUR_TESTNET_PRIVATE_KEY_HERE"
+  echo ""
+  echo "  ⚠️  No private key provided. You'll need to add it manually to $ENV_FILE"
+fi
+
+echo ""
+
+# Prompt for optional overrides
+read -p "  🌐 Facilitator URL [default: $DEFAULT_FACILITATOR]: " FACILITATOR
+FACILITATOR="${FACILITATOR:-$DEFAULT_FACILITATOR}"
+
+read -p "  ⛓️  Network (CAIP-2) [default: $DEFAULT_NETWORK]: " NETWORK
+NETWORK="${NETWORK:-$DEFAULT_NETWORK}"
+
+read -p "  🔌 Server port [default: $DEFAULT_PORT]: " PORT
+PORT="${PORT:-$DEFAULT_PORT}"
+
+# Write .env file
+cat > "$ENV_FILE" << EOF
+# ─── x402 Demo Configuration ────────────────────────────────────
+# Wallet that receives payments (any EVM address)
+PAY_TO_ADDRESS=$PAY_TO
+
+# Client wallet private key (for signing payments — TESTNET ONLY!)
+# Generate one at: https://vanity-eth.tk/ or use MetaMask export
+EVM_PRIVATE_KEY=$PRIVATE_KEY
+
+# Facilitator URL (public testnet facilitator by Coinbase)
+FACILITATOR_URL=$FACILITATOR
+
+# Network: Base Sepolia testnet (CAIP-2 format)
+NETWORK=$NETWORK
+
+# Server port
+PORT=$PORT
+EOF
+
+echo ""
+echo "  ✅ Created $ENV_FILE with your configuration"
+
+# ─── Print Next Steps ───────────────────────────────────────────
+echo ""
+echo "  ╔══════════════════════════════════════════════════╗"
+echo "  ║               ✅  Setup Complete!                ║"
+echo "  ╠══════════════════════════════════════════════════╣"
+echo "  ║                                                  ║"
+echo "  ║  To run the demo:                                ║"
+echo "  ║                                                  ║"
+echo "  ║  Terminal 1 (Resource Server):                   ║"
+echo "  ║    cd server && npm run dev                      ║"
+echo "  ║                                                  ║"
+echo "  ║  Terminal 2 (Frontend):                          ║"
+echo "  ║    cd frontend && npm run dev                    ║"
+echo "  ║                                                  ║"
+echo "  ║  Then open: http://localhost:3000                ║"
+echo "  ║                                                  ║"
+echo "  ╠══════════════════════════════════════════════════╣"
+echo "  ║  Before testing payments, make sure:             ║"
+echo "  ║    ✓ Your private key is set in server/.env      ║"
+echo "  ║    ✓ Your wallet has testnet ETH (gas)           ║"
+echo "  ║    ✓ Your wallet has testnet USDC (payments)     ║"
+echo "  ╚══════════════════════════════════════════════════╝"
 echo ""
