@@ -34,7 +34,8 @@ if [ -f "$ENV_FILE" ]; then
   if [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
     echo "  Keeping existing $ENV_FILE"
     echo ""
-    print_next_steps
+    echo "  ✅ Setup complete! Run 'cd server && npm run dev' and 'cd frontend && npm run dev' to start."
+    echo ""
     exit 0
   fi
 fi
