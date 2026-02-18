@@ -849,8 +849,16 @@ body {
 }
 
 .tx-log-body {
-  max-height: 300px;
+  max-height: 600px;
   overflow-y: auto;
+}
+
+.tx-log-entry {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tx-log-entry:last-child {
+  border-bottom: none;
 }
 
 .tx-log-item {
@@ -858,16 +866,17 @@ body {
   align-items: center;
   gap: 12px;
   padding: 12px 24px;
-  border-bottom: 1px solid var(--border-subtle);
   transition: background 0.2s ease;
   animation: slideIn 0.3s ease-out;
+  user-select: none;
 }
 
 .tx-log-item:hover {
   background: var(--bg-glass-hover);
 }
 
-.tx-log-item:last-child {
+.tx-log-item.expanded {
+  background: rgba(0, 212, 255, 0.03);
   border-bottom: none;
 }
 
@@ -907,6 +916,14 @@ body {
   text-align: center;
   color: var(--text-muted);
   font-size: 14px;
+}
+
+.tx-detail-data {
+  margin-left: 28px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
 }
 
 /* ─── Code Snippet ────────────────────────────────────────────── */

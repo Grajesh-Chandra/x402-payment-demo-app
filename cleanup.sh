@@ -60,6 +60,15 @@ if [ -d "server/dist" ]; then
   echo "  ✓ Removed server/dist"
 fi
 
+# ─── Clear logs ────────────────────────────────────────────────
+echo ""
+echo "🗑️  Clearing logs..."
+
+if [ -d "server/data" ]; then
+  rm -rf server/data
+  echo "  ✓ Cleared server/data (transactions + server log)"
+fi
+
 # ─── Optionally remove .env ────────────────────────────────────
 echo ""
 if [ -f "server/.env" ]; then

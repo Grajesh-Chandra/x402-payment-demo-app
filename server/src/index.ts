@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { paymentMiddleware } from "@x402/express";
 import { x402ResourceServer, HTTPFacilitatorClient } from "@x402/core/server";
 import { registerExactEvmScheme } from "@x402/evm/exact/server";
+import { logTransaction, getTransactions, appendToServerLog, getServerLog } from "./logger.js";
 
 dotenv.config();
 
@@ -29,6 +30,12 @@ app.use(
 );
 
 app.use(express.json());
+
+// ─── Helper: log to both console and file ──────────────────────────
+function log(message: string) {
+  console.log(message);
+  appendToServerLog(message);
+}
 
 // ─── Request/Response Logger ───────────────────────────────────────
 const colors = {
@@ -64,14 +71,31 @@ function methodColor(method: string) {
   }
 }
 
+// ─── Endpoint pricing lookup ───────────────────────────────────────
+const ENDPOINT_PRICES: Record<string, string> = {
+  "/api/weather": "$0.001",
+  "/api/joke": "$0.0005",
+  "/api/premium-report": "$0.01",
+};
+
+// ─── Unique transaction ID counter ─────────────────────────────────
+let txCounter = 0;
+
 app.use((req, res, next) => {
   const start = Date.now();
   const timestamp = new Date().toISOString();
 
+  // ── Capture payment-related request headers ──
+  const paymentHeaders = [
+    "x-payment", "x-payment-response", "payment-response",
+    "x-payment-required", "payment-required",
+  ];
+  const capturedReqHeaders: Record<string, string> = {};
+
   // ── Log incoming request ──
-  console.log("");
-  console.log(`${colors.dim}──────────────────────────────────────────────────────${colors.reset}`);
-  console.log(
+  log("");
+  log(`${colors.dim}──────────────────────────────────────────────────────${colors.reset}`);
+  log(
     `${colors.magenta}▶ REQUEST${colors.reset}  ` +
     `${methodColor(req.method)}${req.method}${colors.reset} ` +
     `${colors.white}${req.originalUrl}${colors.reset}  ` +
@@ -80,42 +104,44 @@ app.use((req, res, next) => {
 
   // Log query params
   if (Object.keys(req.query).length > 0) {
-    console.log(`  ${colors.dim}Query:${colors.reset}`, req.query);
+    log(`  ${colors.dim}Query:${colors.reset} ${JSON.stringify(req.query)}`);
   }
 
   // Log request body (for POST/PUT)
   if (req.body && Object.keys(req.body).length > 0) {
-    console.log(`  ${colors.dim}Body:${colors.reset}`, JSON.stringify(req.body, null, 2));
+    log(`  ${colors.dim}Body:${colors.reset} ${JSON.stringify(req.body, null, 2)}`);
   }
 
   // Log x402 payment headers
-  const paymentHeaders = [
-    "x-payment", "x-payment-response", "payment-response",
-    "x-payment-required", "payment-required",
-  ];
   for (const header of paymentHeaders) {
     const value = req.headers[header];
     if (value) {
-      const truncated = typeof value === "string" && value.length > 120
-        ? value.slice(0, 120) + "..."
-        : value;
-      console.log(`  ${colors.yellow}⚡ ${header}:${colors.reset} ${truncated}`);
+      const strValue = typeof value === "string" ? value : JSON.stringify(value);
+      capturedReqHeaders[header] = strValue;
+      const truncated = strValue.length > 120 ? strValue.slice(0, 120) + "..." : strValue;
+      log(`  ${colors.yellow}⚡ ${header}:${colors.reset} ${truncated}`);
     }
   }
 
   // Log other notable headers
   const origin = req.headers["origin"];
   const ua = req.headers["user-agent"];
-  if (origin) console.log(`  ${colors.dim}Origin:${colors.reset} ${origin}`);
-  if (ua) console.log(`  ${colors.dim}User-Agent:${colors.reset} ${ua?.toString().slice(0, 80)}`);
+  if (origin) {
+    log(`  ${colors.dim}Origin:${colors.reset} ${origin}`);
+    capturedReqHeaders["origin"] = String(origin);
+  }
+  if (ua) {
+    log(`  ${colors.dim}User-Agent:${colors.reset} ${ua?.toString().slice(0, 80)}`);
+  }
 
   // ── Intercept response to log it ──
+  let txLogged = false;
   const originalJson = res.json.bind(res);
   res.json = (body: unknown) => {
     const duration = Date.now() - start;
     const status = res.statusCode;
 
-    console.log(
+    log(
       `${colors.magenta}◀ RESPONSE${colors.reset} ` +
       `${statusColor(status)}${status}${colors.reset} ` +
       `${methodColor(req.method)}${req.method}${colors.reset} ` +
@@ -124,29 +150,51 @@ app.use((req, res, next) => {
     );
 
     // Log response payment headers
+    const capturedResHeaders: Record<string, string> = {};
     for (const header of paymentHeaders) {
       const value = res.getHeader(header);
       if (value) {
         const str = typeof value === "string" ? value : JSON.stringify(value);
+        capturedResHeaders[header] = str;
         const truncated = str.length > 200 ? str.slice(0, 200) + "..." : str;
-        console.log(`  ${colors.yellow}⚡ ${header}:${colors.reset} ${truncated}`);
+        log(`  ${colors.yellow}⚡ ${header}:${colors.reset} ${truncated}`);
       }
     }
 
     // Log response body
     if (body) {
       const bodyStr = JSON.stringify(body, null, 2);
-      // Truncate very large responses
       if (bodyStr.length > 1500) {
-        console.log(`  ${colors.dim}Response Body (truncated):${colors.reset}`);
-        console.log(`  ${bodyStr.slice(0, 1500)}...`);
+        log(`  ${colors.dim}Response Body (truncated):${colors.reset}`);
+        log(`  ${bodyStr.slice(0, 1500)}...`);
       } else {
-        console.log(`  ${colors.dim}Response Body:${colors.reset}`);
-        console.log(`  ${bodyStr}`);
+        log(`  ${colors.dim}Response Body:${colors.reset}`);
+        log(`  ${bodyStr}`);
       }
     }
 
-    console.log(`${colors.dim}──────────────────────────────────────────────────────${colors.reset}`);
+    log(`${colors.dim}──────────────────────────────────────────────────────${colors.reset}`);
+
+    // ── Log transaction for protected endpoints ──
+    const endpointPath = req.path;
+    if (ENDPOINT_PRICES[endpointPath]) {
+      txLogged = true;
+      logTransaction({
+        id: `tx-${Date.now()}-${++txCounter}`,
+        endpoint: endpointPath,
+        method: req.method,
+        price: ENDPOINT_PRICES[endpointPath],
+        status: status >= 200 && status < 300 ? "success" : "failed",
+        statusCode: status,
+        timestamp: new Date().toISOString(),
+        durationMs: duration,
+        requestHeaders: Object.keys(capturedReqHeaders).length > 0 ? capturedReqHeaders : undefined,
+        responseHeaders: Object.keys(capturedResHeaders).length > 0 ? capturedResHeaders : undefined,
+        responseBody: body,
+        error: status >= 400 ? `HTTP ${status}` : undefined,
+      });
+    }
+
     return originalJson(body);
   };
 
@@ -154,11 +202,11 @@ app.use((req, res, next) => {
   const originalSend = res.send.bind(res);
   res.send = (body: unknown) => {
     // Only log if res.json didn't already handle it
-    if (!res.headersSent) {
+    if (!res.headersSent && !txLogged) {
       const duration = Date.now() - start;
       const status = res.statusCode;
 
-      console.log(
+      log(
         `${colors.magenta}◀ RESPONSE${colors.reset} ` +
         `${statusColor(status)}${status}${colors.reset} ` +
         `${methodColor(req.method)}${req.method}${colors.reset} ` +
@@ -167,28 +215,54 @@ app.use((req, res, next) => {
       );
 
       // Log all response headers for non-200 responses (e.g. 402)
+      const capturedResHeaders: Record<string, string> = {};
       if (status !== 200) {
         const headers = res.getHeaders();
         const interestingHeaders = Object.entries(headers).filter(
           ([key]) => !["connection", "keep-alive", "transfer-encoding"].includes(key)
         );
         if (interestingHeaders.length > 0) {
-          console.log(`  ${colors.dim}Response Headers:${colors.reset}`);
+          log(`  ${colors.dim}Response Headers:${colors.reset}`);
           for (const [key, value] of interestingHeaders) {
             const str = typeof value === "string" ? value : JSON.stringify(value);
+            capturedResHeaders[key] = str;
             const truncated = str.length > 200 ? str.slice(0, 200) + "..." : str;
-            console.log(`    ${colors.cyan}${key}:${colors.reset} ${truncated}`);
+            log(`    ${colors.cyan}${key}:${colors.reset} ${truncated}`);
           }
         }
       }
 
       if (body && typeof body === "string" && body.length > 0) {
         const truncated = body.length > 1500 ? body.slice(0, 1500) + "..." : body;
-        console.log(`  ${colors.dim}Response Body:${colors.reset}`);
-        console.log(`  ${truncated}`);
+        log(`  ${colors.dim}Response Body:${colors.reset}`);
+        log(`  ${truncated}`);
       }
 
-      console.log(`${colors.dim}──────────────────────────────────────────────────────${colors.reset}`);
+      log(`${colors.dim}──────────────────────────────────────────────────────${colors.reset}`);
+
+      // ── Log transaction for protected endpoints (non-JSON 402 responses) ──
+      const endpointPath = req.path;
+      if (ENDPOINT_PRICES[endpointPath]) {
+        let parsedBody: unknown = undefined;
+        if (body && typeof body === "string") {
+          try { parsedBody = JSON.parse(body); } catch { parsedBody = body; }
+        }
+        txLogged = true;
+        logTransaction({
+          id: `tx-${Date.now()}-${++txCounter}`,
+          endpoint: endpointPath,
+          method: req.method,
+          price: ENDPOINT_PRICES[endpointPath],
+          status: "failed",
+          statusCode: status,
+          timestamp: new Date().toISOString(),
+          durationMs: duration,
+          requestHeaders: Object.keys(capturedReqHeaders).length > 0 ? capturedReqHeaders : undefined,
+          responseHeaders: Object.keys(capturedResHeaders).length > 0 ? capturedResHeaders : undefined,
+          responseBody: parsedBody,
+          error: `HTTP ${status}`,
+        });
+      }
     }
     return originalSend(body);
   };
@@ -248,10 +322,6 @@ app.use(
 
 // ─── Protected Endpoints ───────────────────────────────────────────
 
-import { logTransaction, getTransactions } from "./logger.js";
-
-// ... existing code ...
-
 app.get("/api/weather", (_req, res) => {
   const cities = [
     { city: "San Francisco", temp: 62, condition: "Foggy", humidity: 78, wind: "12 mph NW" },
@@ -261,16 +331,6 @@ app.get("/api/weather", (_req, res) => {
     { city: "Mumbai", temp: 88, condition: "Hot & Humid", humidity: 90, wind: "6 mph SW" },
   ];
   const weather = cities[Math.floor(Math.random() * cities.length)];
-
-  // Log successful transaction
-  logTransaction({
-    id: `tx-${Date.now()}`,
-    endpoint: "/api/weather",
-    price: "$0.001",
-    status: "success",
-    timestamp: new Date().toISOString(),
-  });
-
   res.json({
     success: true,
     data: {
@@ -291,16 +351,6 @@ app.get("/api/joke", (_req, res) => {
     { setup: "Why did the developer go broke?", punchline: "Because he used up all his cache." },
   ];
   const joke = jokes[Math.floor(Math.random() * jokes.length)];
-
-  // Log successful transaction
-  logTransaction({
-    id: `tx-${Date.now()}`,
-    endpoint: "/api/joke",
-    price: "$0.0005",
-    status: "success",
-    timestamp: new Date().toISOString(),
-  });
-
   res.json({
     success: true,
     data: {
@@ -313,15 +363,6 @@ app.get("/api/joke", (_req, res) => {
 });
 
 app.get("/api/premium-report", (_req, res) => {
-  // Log successful transaction
-  logTransaction({
-    id: `tx-${Date.now()}`,
-    endpoint: "/api/premium-report",
-    price: "$0.01",
-    status: "success",
-    timestamp: new Date().toISOString(),
-  });
-
   res.json({
     success: true,
     data: {
@@ -344,9 +385,16 @@ app.get("/api/premium-report", (_req, res) => {
   });
 });
 
+// ─── Log Endpoints ─────────────────────────────────────────────────
+
 app.get("/api/transactions", (_req, res) => {
   const transactions = getTransactions();
   res.json({ success: true, transactions });
+});
+
+app.get("/api/server-log", (_req, res) => {
+  const logContent = getServerLog();
+  res.json({ success: true, log: logContent });
 });
 
 // ─── Free Endpoints ────────────────────────────────────────────────
@@ -407,22 +455,25 @@ app.get("/api/endpoints", (_req, res) => {
 // ─── Start Server ──────────────────────────────────────────────────
 
 app.listen(PORT, () => {
-  console.log("");
-  console.log("  ╔══════════════════════════════════════════════════╗");
-  console.log("  ║         x402 Demo Resource Server               ║");
-  console.log("  ╠══════════════════════════════════════════════════╣");
-  console.log(`  ║  🌐  Server:      http://localhost:${PORT}        ║`);
-  console.log(`  ║  ⚡  Facilitator: ${facilitatorUrl.slice(0, 30)}...  ║`);
-  console.log(`  ║  ⛓️   Network:     ${network.padEnd(25)}   ║`);
-  console.log(`  ║  💰  Pay To:      ${payTo.slice(0, 10)}...${payTo.slice(-6)}          ║`);
-  console.log("  ╠══════════════════════════════════════════════════╣");
-  console.log("  ║  Protected Endpoints:                           ║");
-  console.log("  ║    GET /api/weather         $0.001  USDC        ║");
-  console.log("  ║    GET /api/joke            $0.0005 USDC        ║");
-  console.log("  ║    GET /api/premium-report  $0.01   USDC        ║");
-  console.log("  ║  Free Endpoints:                                ║");
-  console.log("  ║    GET /api/health                              ║");
-  console.log("  ║    GET /api/endpoints                           ║");
-  console.log("  ╚══════════════════════════════════════════════════╝");
-  console.log("");
+  const banner = `
+  ╔══════════════════════════════════════════════════╗
+  ║         x402 Demo Resource Server               ║
+  ╠══════════════════════════════════════════════════╣
+  ║  🌐  Server:      http://localhost:${PORT}        ║
+  ║  ⚡  Facilitator: ${facilitatorUrl.slice(0, 30)}...  ║
+  ║  ⛓️   Network:     ${network.padEnd(25)}   ║
+  ║  💰  Pay To:      ${payTo.slice(0, 10)}...${payTo.slice(-6)}          ║
+  ╠══════════════════════════════════════════════════╣
+  ║  Protected Endpoints:                           ║
+  ║    GET /api/weather         $0.001  USDC        ║
+  ║    GET /api/joke            $0.0005 USDC        ║
+  ║    GET /api/premium-report  $0.01   USDC        ║
+  ║  Free Endpoints:                                ║
+  ║    GET /api/health                              ║
+  ║    GET /api/endpoints                           ║
+  ║    GET /api/transactions    (log viewer)        ║
+  ║    GET /api/server-log      (raw server log)    ║
+  ╚══════════════════════════════════════════════════╝
+`;
+  log(banner);
 });

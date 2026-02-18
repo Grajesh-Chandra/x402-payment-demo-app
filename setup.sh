@@ -40,45 +40,72 @@ fi
 
 if [ "$CONFIGURE_ENV" = true ]; then
   echo ""
-  echo "  Before configuring, you'll need a testnet wallet."
-  echo "  If you don't have one yet, create one using either:"
+  echo "  ─────────────────────────────────────────────────"
+  echo "  🔑 Generating a fresh testnet wallet..."
+  echo "  ─────────────────────────────────────────────────"
   echo ""
-  echo "    Option A: MetaMask  → https://metamask.io/"
-  echo "    Option B: Vanity ETH → https://vanity-eth.tk/ (quick, runs locally)"
+
+  # Generate wallet using viem via Node.js (run from server dir where viem is installed)
+  WALLET_JSON=$(node server/scripts/generate-wallet.mjs 2>/dev/null)
+  GEN_ADDRESS=$(echo "$WALLET_JSON" | node -e "process.stdin.on('data',d=>console.log(JSON.parse(d).address))")
+  GEN_PRIVATE_KEY=$(echo "$WALLET_JSON" | node -e "process.stdin.on('data',d=>console.log(JSON.parse(d).privateKey))")
+
+  echo "  ╔══════════════════════════════════════════════════╗"
+  echo "  ║   🆕  New Wallet Generated (Base Sepolia)        ║"
+  echo "  ╠══════════════════════════════════════════════════╣"
+  echo "  ║                                                  ║"
+  echo "  ║  Address:                                        ║"
+  echo "  ║  $GEN_ADDRESS  ║"
+  echo "  ║                                                  ║"
+  echo "  ║  Private Key:                                    ║"
+  echo "  ║  ${GEN_PRIVATE_KEY:0:34}  ║"
+  echo "  ║  ${GEN_PRIVATE_KEY:34}  ║"
+  echo "  ║                                                  ║"
+  echo "  ║  ⚠️  SAVE THESE! They won't be shown again.      ║"
+  echo "  ╚══════════════════════════════════════════════════╝"
   echo ""
-  echo "  Then fund it with testnet tokens:"
-  echo "    • ETH (gas):   https://www.coinbase.com/faucets/base-ethereum-sepolia-faucet"
-  echo "    • USDC (pays): https://faucet.circle.com/ (select Base Sepolia)"
+  echo "  ─────────────────────────────────────────────────"
+  echo "  📋 Fund Your Wallet (2 steps):"
+  echo "  ─────────────────────────────────────────────────"
+  echo ""
+  echo "  Step 1: Get testnet ETH (for gas fees)"
+  echo "    → https://www.coinbase.com/faucets/base-ethereum-sepolia-faucet"
+  echo "    → Paste your address: $GEN_ADDRESS"
+  echo ""
+  echo "  Step 2: Get testnet USDC (for payments)"
+  echo "    → https://faucet.circle.com/"
+  echo "    → Select 'Base Sepolia' and paste your address"
   echo ""
   echo "  ─────────────────────────────────────────────────"
   echo ""
 
-  # Default values
-  DEFAULT_PAY_TO="0x209693Bc6EfC3BEDC16a31990A4B163C56Db0434"
-  DEFAULT_FACILITATOR="https://x402.org/facilitator"
-  DEFAULT_NETWORK="eip155:84532"
-  DEFAULT_PORT="4021"
-
-  # Prompt for wallet address
-  read -p "  💰 Pay-to wallet address (receives payments)
-       [default: ${DEFAULT_PAY_TO:0:10}...${DEFAULT_PAY_TO: -6}]: " PAY_TO
-  PAY_TO="${PAY_TO:-$DEFAULT_PAY_TO}"
-
-  echo ""
-
-  # Prompt for private key
-  read -p "  🔑 Wallet private key (for signing — TESTNET ONLY!)
-       [starts with 0x]: " PRIVATE_KEY
-
-  if [ -z "$PRIVATE_KEY" ]; then
-    PRIVATE_KEY="0x_YOUR_TESTNET_PRIVATE_KEY_HERE"
+  # Ask if they want to use the generated wallet or provide their own
+  read -p "  Use this generated wallet? (Y/n): " USE_GENERATED
+  if [[ "$USE_GENERATED" =~ ^[Nn]$ ]]; then
+    read -p "  💰 Pay-to wallet address: " PAY_TO
     echo ""
-    echo "  ⚠️  No private key provided. You'll need to add it manually to $ENV_FILE"
+    read -p "  🔑 Wallet private key (0x...): " PRIVATE_KEY
+    if [ -z "$PRIVATE_KEY" ]; then
+      PRIVATE_KEY="0x_YOUR_TESTNET_PRIVATE_KEY_HERE"
+      echo ""
+      echo "  ⚠️  No private key provided. You'll need to add it manually to $ENV_FILE"
+    fi
+    if [ -z "$PAY_TO" ]; then
+      PAY_TO="0x209693Bc6EfC3BEDC16a31990A4B163C56Db0434"
+    fi
+  else
+    PAY_TO="$GEN_ADDRESS"
+    PRIVATE_KEY="$GEN_PRIVATE_KEY"
+    echo "  ✅ Using generated wallet"
   fi
 
   echo ""
 
-  # Prompt for optional overrides
+  # Default values for other settings
+  DEFAULT_FACILITATOR="https://x402.org/facilitator"
+  DEFAULT_NETWORK="eip155:84532"
+  DEFAULT_PORT="4021"
+
   read -p "  🌐 Facilitator URL [default: $DEFAULT_FACILITATOR]: " FACILITATOR
   FACILITATOR="${FACILITATOR:-$DEFAULT_FACILITATOR}"
 
@@ -95,7 +122,6 @@ if [ "$CONFIGURE_ENV" = true ]; then
 PAY_TO_ADDRESS=$PAY_TO
 
 # Client wallet private key (for signing payments — TESTNET ONLY!)
-# Generate one at: https://vanity-eth.tk/ or use MetaMask export
 EVM_PRIVATE_KEY=$PRIVATE_KEY
 
 # Facilitator URL (public testnet facilitator by Coinbase)
@@ -111,6 +137,12 @@ EOF
   echo ""
   echo "  ✅ Created $ENV_FILE with your configuration"
 fi
+
+# ─── Initialize Log Files ────────────────────────────────────────
+mkdir -p server/data
+echo "[]" > server/data/transactions.json
+: > server/data/server.log
+echo "  📋 Initialized server/data (transactions.json + server.log)"
 
 # ─── Launch Dev Servers ──────────────────────────────────────────
 echo ""
